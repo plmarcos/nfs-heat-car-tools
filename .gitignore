@@ -1,0 +1,25 @@
+# Dados de jogo NUNCA entram neste repositorio
+*.obj
+*.fbx
+*.mtl
+*.blend
+*.png
+*.jpg
+*.jpeg
+*.dds
+*.tga
+*.xml
+*.csv
+
+# chaves e binarios de terceiros (Frosty, SDK do jogo)
+*.key
+*.dll
+*.exe
+*.pdb
+
+# ambiente e cache
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
