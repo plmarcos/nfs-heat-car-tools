@@ -76,6 +76,16 @@ Este projeto não tem vínculo com a Electronic Arts, a Criterion Games nem com 
 | `catalogo.py` / `catalogo_liveries.py` | Monta folhas de contato do acervo |
 | `preview.py` / `preview_texturizado.py` | Renders de prévia |
 
+## Guia de uso dos modelos
+
+Depois de extrair, **[ASSETS.md](ASSETS.md)** explica como usar os arquivos: as
+convenções de eixo e unidade, por que o FBX não é arquivo repetido (é onde estão
+as normais que o OBJ perdeu), o que cada canal das texturas significa, como
+remontar o carro a partir das peças e qual é a regra certa da roda.
+
+Tudo lá foi medido nos arquivos, e o que não deu para medir está marcado como
+não medido.
+
 ## Três coisas que custaram caro para descobrir
 
 Estão documentadas nos próprios scripts, mas valem o aviso:
