@@ -3,6 +3,10 @@ Monta o carro com as quatro rodas no lugar.
 
 Gera <carro>_com_rodas.obj a partir de <carro>.obj + <carro>_wheel.obj.
 
+A malha da roda no Heat e' **so' o aro**; o pneu e' malha compartilhada. O pneu
+recebe a escala dele mesmo, e o aro e' escalado para assentar no talao do pneu
+ja' montado, com 2% de labio.
+
 De onde vem cada numero:
   - diametro e largura do pneu: tireconfig do proprio jogo (dado autoritativo)
   - posicao dos eixos: ajuste de um circulo do raio conhecido ao labio do arco de roda
@@ -136,14 +140,15 @@ def assemble(cdir, spec, out_path, tire_path=None):
                 idx.add(int(tok.split("/")[0]) - 1)
         pts = [verts[i] for i in sorted(idx) if 0 <= i < len(verts)]
         if not pts:
-            return None, None
-        return (max(math.hypot(p[1], p[2]) for p in pts),
-                max(p[0] for p in pts) - min(p[0] for p in pts))
+            return None, None, None
+        raios = [math.hypot(p[1], p[2]) for p in pts]
+        # O minimo e' o talao: onde a borracha encosta no aro.
+        return (max(raios), max(p[0] for p in pts) - min(p[0] for p in pts), min(raios))
 
     tire_obj = list(TO)[0] if TO else None
-    tire_r = tire_w = None
+    tire_r = tire_w = tire_rmin = None
     if tire_obj:
-        tire_r, tire_w = mesh_span(TV, TO[tire_obj])
+        tire_r, tire_w, tire_rmin = mesh_span(TV, TO[tire_obj])
 
     def emit(verts, vts, obj, s_rad, s_wid, xc, yc, zc, side, label):
         nonlocal vbase, vtbase
@@ -204,14 +209,24 @@ def assemble(cdir, spec, out_path, tire_path=None):
         nr, nw = native_radius(objn)
         if not nr:
             continue
-        # Com pneu: a escala vem do pneu (aro e pneu casam em escala nativa).
-        # Sem pneu (motos): o proprio mesh ja e a roda inteira.
+        # O PNEU sai da escala dele mesmo, para bater o diametro do jogo.
+        # O ARO assenta no TALAO do pneu ja' escalado, com 2% de labio -- e nao
+        # na mesma escala do pneu. O raio nativo do aro varia de 0,18 a 0,50 m
+        # entre os carros; dividir uma escala so' entre os dois deforma o aro.
+        # Medido nos 166: pneu aparente vai de -317..131 mm (2 carros com o aro
+        # atravessando a borracha) para 65..126 mm, nenhum fora da faixa.
         if tire_r:
-            s_rad = r / tire_r
+            s_rad = r / tire_r                      # pneu
             s_wid = (w / tire_w) if tire_w else s_rad
+            talao = (tire_rmin or 0) * s_rad        # talao ja' montado
+            # A LARGURA do aro tambem sai do pneu, nao do raio: escalar os dois
+            # juntos parecia mais limpo e alargou o aro em 23%, jogando a roda
+            # para fora do para-lama.
+            s_rad_aro = (talao * 1.02 / nr) if talao else (r / nr)
+            s_wid_aro = s_wid
         else:
-            s_rad = r / nr
-            s_wid = (w / nw) if nw else s_rad
+            s_rad = s_rad_aro = r / nr              # moto: o mesh ja' e a roda inteira
+            s_wid = s_wid_aro = (w / nw) if nw else s_rad
         # meia_bitola JA e a posicao do centro da roda (ver fitwheels.half_track),
         # nao a lateral da carroceria — nao subtrair a largura do pneu aqui.
         if spec.get("single_track"):
@@ -220,7 +235,7 @@ def assemble(cdir, spec, out_path, tire_path=None):
             xc = side * max(0.15, spec["half_track_f"] if which == "f" else spec["half_track_r"])
         tag = ("L" if side > 0 else "R") + which
 
-        emit(WV, WVT, WO[objn], s_rad, s_wid, xc, r, z, side, "rim_" + tag)
+        emit(WV, WVT, WO[objn], s_rad_aro, s_wid_aro, xc, r, z, side, "rim_" + tag)
         if tire_obj:
             emit(TV, TVT, TO[tire_obj], s_rad, s_wid, xc, r, z, side, "tire_" + tag)
 
@@ -279,8 +294,16 @@ def main():
         dirs = [d for d in dirs if os.path.basename(d) in only]
 
     report = []
+    ignorados = []          # pasta sem carroceria: nao e' carro, nao vira linha
     for d in dirs:
         name = os.path.basename(d)
+        # Nem toda pasta e' um carro: `car_porsche_carreras_2014` so' guarda pecas
+        # para outros usarem e nao tem carroceria. Sem esta guarda o `load_all`
+        # mais abaixo estoura com FileNotFoundError e leva a varredura inteira
+        # junto, depois de ja' ter gerado 148 arquivos.
+        if not os.path.exists(os.path.join(d, name + '.obj')):
+            ignorados.append(name)
+            continue
         df, dr, wf, wr, src = tire_specs(name, donor)
         fit = car_wheels(d, df, dr)
         conf = "ok"
@@ -288,7 +311,7 @@ def main():
             # fallback proporcional: entre-eixos ~ 60% do comprimento
             v = load_all(os.path.join(d, name + ".obj"))
             if not v:
-                report.append((name, "sem-modelo", None)); continue
+                ignorados.append(name); continue
             ys = [p[1] for p in v]; zs = [p[2] for p in v]; xs = [p[0] for p in v]
             z0, z1 = min(zs), max(zs); L = z1 - z0
             maxx = max(abs(min(xs)), max(xs))
